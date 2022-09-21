@@ -18,19 +18,39 @@ export function createPostElement(post) {
   setTextContent(liElement, '[data-id="title"]', post.title)
   setTextContent(liElement, '[data-id="description"]', truncateText(post.description, 100))
   setTextContent(liElement, '[data-id="author"]', post.author)
-  setTextContent(liElement, '[data-id="timeSpan"]', ` - ${dayjs(post.updateAt).fromNow()}`)
+  setTextContent(liElement, '[data-id="timeSpan"]', ` - ${dayjs(post.updatedAt).fromNow()}`)
 
   const thumbnailElement = liElement.querySelector('[data-id="thumbnail"]')
   if (thumbnailElement) {
     thumbnailElement.src = post.imageUrl
 
     thumbnailElement.addEventListener('error', () => {
-      thumbnailElement.src = 'https://via.placeholder.com/1368x400?text=thumbnail'
+      thumbnailElement.src = 'https://via.placeholder.com/150/95bbec/800080/?text=Thumbnail'
     })
   }
 
   // attach events
 
+  // go to post detail when click on div.post-item
+  const divElement = liElement.firstElementChild
+  if (divElement) {
+    divElement.addEventListener('click', (event) => {
+      // S2: if event is trigger from menu --> ignore
+      const menu = liElement.querySelector('[data-id="menu"]')
+      if (menu && menu.contains(event.target)) return
+      window.location.assign(`/post-detail.html?id=${post.id}`)
+    })
+  }
+
+  // add click event for edit button
+  const editButton = liElement.querySelector('[data-id ="edit"]')
+  if (editButton) {
+    editButton.addEventListener('click', (e) => {
+      // S1: prevent event bubbling to parent
+      // e.stopPropagation()
+      window.location.assign(`/add-edit-post.html?id=${post.id}`)
+    })
+  }
   return liElement
 }
 
