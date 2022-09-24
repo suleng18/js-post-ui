@@ -1,8 +1,40 @@
 import postApi from './api/postApi'
 import { initPostForm, toast } from './utils'
 
+function removeUnsedFields(formValues) {
+  const payload = { ...formValues }
+
+  // imageSource = 'picsum' ---> remove image
+  // imageSource = 'upload' ---> remove imageUrl
+  if (payload.imageSource === 'upload') {
+    delete payload.imageUrl
+  } else {
+    delete payload.image
+  }
+
+  // finally remove imageSource
+  delete payload.imageSource
+
+  // remove id if it's add mode
+  if (!payload.id) delete payload.id
+
+  return payload
+}
+
+function jsonToFormData(jsonObject) {
+  const formData = new FormData()
+
+  for (const key in jsonObject) {
+    formData.set(key, jsonObject[key])
+  }
+
+  return formData
+}
+
 async function handlePostFormSubmit(formValues) {
   try {
+    const payload = removeUnsedFields(formValues)
+    const formData = jsonToFormData(payload)
     // throw new Error('Something went wrong')
     // check add / edit mode
     // S1: based on search params (check id)
@@ -17,8 +49,8 @@ async function handlePostFormSubmit(formValues) {
     // }
 
     const savedPost = formValues.id
-      ? await postApi.update(formValues)
-      : await postApi.add(formValues)
+      ? await postApi.updateFormData(formData)
+      : await postApi.addFormData(formData)
 
     // show success message
     toast.success('Save post successfully!')

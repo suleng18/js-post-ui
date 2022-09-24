@@ -1,6 +1,11 @@
-import { randomNumber, setBackgroundImage, setFieldValue, setTextContent } from './common'
+import { randomNumber, setBackgroundImage, setTextContent } from '.'
+import { setFieldValue } from './common'
 import * as yup from 'yup'
-import { random } from 'lodash'
+
+const ImageSource = {
+  PICSUM: 'picsum',
+  UPLOAD: 'upload',
+}
 
 function setFormValues(form, formValues) {
   setFieldValue(form, '[name="title"]', formValues?.title)
@@ -16,7 +21,7 @@ function getFormValues(form) {
 
   // S1: query each input and add to values object
   // ;['title', 'author', 'description', 'imageUrl'].forEach((name) => {
-  //   const field = form.querySelector(`[name="${name}"`)
+  //   const field = form.querySelector(`[name="${name}"]`)
   //   if (field) formValues[name] = field.value
   // })
 
@@ -25,6 +30,7 @@ function getFormValues(form) {
   for (const [key, value] of data) {
     formValues[key] = value
   }
+
   return formValues
 }
 
@@ -40,10 +46,29 @@ function getPostSchema() {
         (value) => value.split(' ').filter((x) => !!x && x.length >= 3).length >= 2
       ),
     description: yup.string(),
-    imageUrl: yup
+    imageSource: yup
       .string()
-      .required('Please random a background image')
-      .url('Please enter a valid URL'),
+      .required('Please select an image source')
+      .oneOf([ImageSource.PICSUM, ImageSource.UPLOAD], 'Invalid image source'),
+
+    imageUrl: yup.string().when('imageSource', {
+      is: ImageSource.PICSUM,
+      then: yup
+        .string()
+        .required('Please random a background image')
+        .url('Please enter a valid URL'),
+    }),
+    image: yup.mixed().when('imageSource', {
+      is: ImageSource.UPLOAD,
+      then: yup
+        .mixed()
+        .test('required', 'Please select an image to upload', (file) => Boolean(file?.name))
+        .test('max-3mb', 'The image is too large (max 3mb)', (file) => {
+          const fileSize = file?.size || 0
+          const MAX_SIZE = 3 * 1024 * 1024 // 3mb
+          return fileSize <= MAX_SIZE
+        }),
+    }),
   })
 }
 
@@ -55,10 +80,10 @@ function setFieldError(form, name, error) {
   }
 }
 
-async function validatePostFrom(form, formValues) {
+async function validatePostForm(form, formValues) {
   try {
     // reset previous errors
-    ;['title', 'author', 'imageUrl'].forEach((name) => setFieldError(form, name, ''))
+    ;['title', 'author', 'imageUrl', 'image'].forEach((name) => setFieldError(form, name, ''))
 
     // start validating
     const schema = getPostSchema()
@@ -83,8 +108,25 @@ async function validatePostFrom(form, formValues) {
   // add was-validated class to form element
   const isValid = form.checkValidity()
   if (!isValid) form.classList.add('was-validated')
-
   return isValid
+}
+
+async function validateFormField(form, formValues, name) {
+  try {
+    // clear previous error
+    setFieldError(form, name, '')
+
+    const schema = getPostSchema()
+    await schema.validateAt(name, formValues)
+  } catch (error) {
+    setFieldError(form, name, error.message)
+  }
+
+  // show validation error (if any)
+  const field = form.querySelector(`[name="${name}"]`)
+  if (field && !field.checkValidity()) {
+    field.parentElement.classList.add('was-validated')
+  }
 }
 
 function showLoading(form) {
@@ -108,10 +150,8 @@ function initRandomImage(form) {
   if (!randomButton) return
 
   randomButton.addEventListener('click', () => {
-    // random ID
-    // build URL
     const imageUrl = `https://picsum.photos/id/${randomNumber(1000)}/1368/400`
-    // set imageUrl input + background
+
     setFieldValue(form, '[name="imageUrl"]', imageUrl) // hidden field
     setBackgroundImage(document, '#postHeroImage', imageUrl)
   })
@@ -131,6 +171,40 @@ function initRadioImageSource(form) {
   })
 }
 
+function initUploadImage(form) {
+  const uploadImage = form.querySelector('[name="image"]')
+  if (!uploadImage) return
+
+  uploadImage.addEventListener('change', (event) => {
+    const file = event.target.files[0]
+    if (file) {
+      const imageUrl = URL.createObjectURL(file)
+      setBackgroundImage(document, '#postHeroImage', imageUrl)
+
+      validateFormField(
+        form,
+        {
+          imageSource: ImageSource.UPLOAD,
+          image: file,
+        },
+        'image'
+      )
+    }
+  })
+}
+
+function initValidationOnChange(form) {
+  ;['title', 'author'].forEach((name) => {
+    const field = form.querySelector(`[name="${name}"]`)
+    if (field) {
+      field.addEventListener('input', (event) => {
+        const newValue = event.target.value
+        validateFormField(form, { [name]: newValue }, name)
+      })
+    }
+  })
+}
+
 export function initPostForm({ formId, defaultValues, onSubmit }) {
   const form = document.getElementById(formId)
   if (!form) return
@@ -141,6 +215,8 @@ export function initPostForm({ formId, defaultValues, onSubmit }) {
   // init events
   initRandomImage(form)
   initRadioImageSource(form)
+  initUploadImage(form)
+  initValidationOnChange(form)
 
   form.addEventListener('submit', async (event) => {
     event.preventDefault()
@@ -157,10 +233,11 @@ export function initPostForm({ formId, defaultValues, onSubmit }) {
 
     // validation
     // if valid trigger submit callback
-    // otherwise, show validation error
-    const isValid = await validatePostFrom(form, formValues)
+    // otherwise, show validation errors
+    const isValid = await validatePostForm(form, formValues)
     if (isValid) await onSubmit?.(formValues)
 
+    // always hide loading no matter form is valid or not
     hideLoading(form)
     submitting = false
   })
