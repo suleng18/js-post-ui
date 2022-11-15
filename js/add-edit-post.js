@@ -53,7 +53,7 @@ async function handlePostFormSubmit(formValues) {
       : await postApi.addFormData(formData)
 
     // show success message
-    toast.success('Save post successfully!')
+    toast.success('Save post successfully 🤗 ')
 
     // redirect to detail page
     setTimeout(() => {
